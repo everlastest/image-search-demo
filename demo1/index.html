@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="https://unpkg.com/vue@2.6.14/dist/vue.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <div id="search_body">
+        <h1 id="title">IMAGE SEARCH DEMO</h1>
+        <div id="search_box">
+            <div id="preview"
+                 @mouseover="showBigPicture(true)"
+                 @mouseleave="showBigPicture(false)"
+            ></div>
+            <div id="search_bar" class="search_bar1">{{picture.file !== '' ? picture.file.name : picture.placeholder}}
+                <div id="upload" @click="uploadClick"></div>
+            </div>
+            <input type="file" id="upload_file" @change="uploadPicture">
+            <div class="button_group">
+                <button class="button" @click="search">search</button>
+                <button class="button" @click="remove">clear</button>
+            </div>
+            <div id="big_picture"></div>
+        </div>
+        <div id="loading"></div>
+    </div>
+    <div id="search_content">
+        <h2 class="search_info">共找到 {{pictureList.length}} 张相似图片
+            <span class="tag_title" @click="currentTag=''">tags :</span>
+            <span class="tags"
+                  v-for="(tag,index) in tags"
+                  :style="{color:currentTag===tag?'#69b0ac':'white'}"
+                  :key="tag"
+                  @click="currentTag=tag"
+            >{{tag}}</span>
+        </h2>
+        <div id="picture_wall">
+            <div class="picture_card"
+                 v-show="item.tag===currentTag||currentTag===''"
+                 v-for="(item,index) in pictureList"
+                 :key="item.url"
+                 :style="{backgroundImage:'url('+item.url+')'}"
+                 @mouseover="changeOpacity(index,true)"
+                 @mouseleave="changeOpacity(index,false)">
+                <button class="fav_btn" @click="favorite(index)"></button>
+            </div>
+        </div>
+    </div>
+    <div id="collect">
+        <button id="collect_btn" @click="openCollect"></button>
+        <div id="collect_bag">
+            <span class="close_btn" @click="closeCollect">×</span>
+            <h2>收藏夹</h2>
+            <div id="collect_pictures">
+                <div class="collect_picture"
+                     v-for="(item,index) in collectList"
+                     @mouseover="currentCollectPicture=index"
+                     @mouseleave="currentCollectPicture=''"
+                     :key="item"
+                     :style="{backgroundImage:'url('+item+')'}"
+                >
+                <span v-show="currentCollectPicture===index"
+                      class="delete_btn"
+                      @click="deletePicture(index)"></span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+</body>
+<script>
+    let app = new Vue({
+        el: '#app',
+        data: {
+            picture: {
+                placeholder: '点击右边图标上传图片',
+                file: '',
+                url: '',
+            },
+            pictureList: [],
+            collectList: [],
+            collectSet: new Set(),
+            tags: [],
+            currentTag: '',
+            currentCollectPicture:''
+        },
+        created: function () {
+            if(window.localStorage.getItem('collectList')!==''&&window.localStorage.getItem('collectList')!==null) {
+                this.collectList = window.localStorage.getItem('collectList').split(',')
+                for (let item of this.collectList) {
+                    this.collectSet.add(item)
+                }
+            }
+        },
+        methods: {
+            uploadClick() {
+                document.querySelector('#upload_file').click();
+            },
+            uploadPicture(e) {
+                this.picture.file = e.target.files[0]
+                this.picture.url = URL.createObjectURL(e.target.files[0])
+                let input = document.querySelector('#search_bar')
+                input.className = 'search_bar2'
+                let div = document.querySelector('#preview')
+                div.style.backgroundImage = "url(" + this.picture.url + ")"
+                div.style.display = "inline-block"
+                let btn = document.querySelector('.button_group')
+                btn.style.display = "block"
+            },
+            showBigPicture(index) {
+                let bigPicture = document.querySelector('#big_picture')
+                if (index) {
+                    bigPicture.style.backgroundImage = "url(" + this.picture.url + ")"
+                    bigPicture.style.display = "block"
+                } else {
+                    bigPicture.style.display = "none"
+                }
+            },
+            remove() {
+                this.picture.file = ''
+                this.picture.url = ''
+                let input = document.querySelector('#search_bar')
+                input.className = 'search_bar1'
+                let div = document.querySelector('#preview')
+                div.style.backgroundImage = null
+                div.style.display = "none"
+                let btn = document.querySelector('.button_group')
+                btn.style.display = "none"
+                let body = document.querySelector("#search_body")
+                body.style.height = "100%"
+                let content = document.querySelector("#search_content")
+                content.style.display = "none"
+            },
+            search() {
+                this.getSimilarPicture()
+            },
+            favorite(i) {
+                if (!this.collectSet.has(this.pictureList[i].url)){
+                    this.collectList.push(this.pictureList[i].url)
+                    this.collectSet.add(this.pictureList[i].url)
+                    let collectList = ''
+                    for (let item of this.collectList) {
+                        collectList += item + ','
+                    }
+                    collectList = collectList.substring(0, collectList.length - 1)
+                    window.localStorage.setItem('collectList', collectList)
+                    this.$message.success("成功加入收藏夹")
+                    return
+                }
+                this.$message.warning("该图片已在收藏夹中")
+            },
+            changeOpacity(index, key) {
+                let favBtn = document.querySelectorAll(".fav_btn")[index]
+                favBtn.style.opacity = key ? 1 : 0
+            },
+            async getSimilarPicture() {
+                let loading = document.querySelector("#loading")
+                loading.style.display = "block"
+                let formData = new FormData()
+                formData.append("file", this.picture.file)
+                const {data:data} = await axios({
+                    url: 'http://127.0.0.1:5000/imgUpload',
+                    method: 'post',
+                    data: formData
+                })
+                this.pictureList = []
+                this.tags = []
+                this.currentTag = ''
+                let set = new Set()
+                for (let i = 0; i < 9; i++) {
+                    let key = "image" + i;
+                    let url = data[key][0].substring(0, 7) + '/' + data[key][0].substring(7);
+                    let tag = data[key][1]
+                    this.pictureList.push({
+                        url: "http://127.0.0.1:5000" + url,
+                        tag: tag
+                    });
+                    if (!set.has(tag)) {
+                        set.add(tag)
+                        this.tags.push(tag)
+                    }
+
+                    }
+                    let body = document.querySelector("#search_body")
+                    body.style.height = "80%"
+                    let content = document.querySelector("#search_content")
+                    content.style.display = "block"
+                    loading.style.display = "none"
+            },
+            openCollect() {
+                let bag = document.querySelector("#collect_bag")
+                let btn = document.querySelector("#collect_btn")
+                btn.style.display = "none"
+                bag.style.transform = "translate(-10%,-50%)"
+            },
+            closeCollect() {
+                let bag = document.querySelector("#collect_bag")
+                let btn = document.querySelector("#collect_btn")
+                bag.style.transform = "translate(100%,-50%)"
+                setTimeout(() => {
+                    btn.style.display = "inline-block"
+                }, 500)
+            },
+            deletePicture(index){
+                this.collectSet.delete(this.collectList[index])
+                this.collectList.splice(index,1)
+                let collectList = ''
+                for (let item of this.collectList) {
+                    collectList += item + ','
+                }
+                collectList = collectList.substring(0, collectList.length - 1)
+                window.localStorage.setItem('collectList', collectList)
+                this.$message.success("成功将次图片移出收藏夹")
+            }
+        }
+    })
+</script>
+</html>
