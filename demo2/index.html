@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" href="index.css">
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <h1 id="title">IMAGE SEARCH DEMO
+        <button class="collect_btn" @click="showCollect=!showCollect">收藏夹</button>
+    </h1>
+    <div id="search_bar">
+        <div class="input">
+            <span @mouseover="isPreview=true" @mouseleave="isPreview=false">{{fileName}}</span>
+            <span class="clear" v-if="url!==''" @click="clear">×</span>
+        </div>
+        <button id="upload_btn" @click="uploadClick"></button>
+        <input type="file" id="upload" @change="upload">
+        <button id="search_btn" @click="search"></button>
+        <div id="preview" v-show="isPreview&&url!==''" :style="{backgroundImage:'url('+url+')'}"></div>
+    </div>
+    <div id="search_result" v-if="showPicture">
+        <h2 class="result_title">共搜索到9张图片</h2>
+        <span class="tag_title" @click="currentTag=''">标签</span>
+        <span class="tags"
+              v-for="(tag,index) in tags"
+              :key="tag"
+              @click="currentTag=tag"
+        >{{tag}}</span>
+        <div class="search_pictures">
+            <div class="search_picture"
+                 v-show="currentTag===item.tag||currentTag===''"
+                 v-for="(item,index) in pictureList"
+                 :key="item.img"
+                 :style="{backgroundImage:'url('+item.img+')'}">
+                <button class="favorite" @click="favorite(index)">收藏</button>
+            </div>
+        </div>
+    </div>
+    <div id="collect" v-if="showCollect">
+        <div class="collect_item"
+             v-for="(item,index) in collects"
+             :key="item">
+            <span class="collect_picture" :style="{backgroundImage:'url('+item+')'}"></span>
+            <button class="remove" @click="remove(index)">×</button>
+        </div>
+    </div>
+    <div class="loading" v-show="isLoading"></div>
+</div>
+</body>
+<script src="https://unpkg.com/vue@2.6.14/dist/vue.min.js"></script>
+<script>
+    let app = new Vue({
+        el: '#app',
+        data: {
+            fileName: '点击右边按钮上传图片',
+            file: '',
+            url: '',
+            isPreview: false,
+            pictureList: [],
+            collects: [],
+            collectSet: new Set(),
+            showCollect: false,
+            tags: [],
+            currentTag: '',
+            currentCollectPicture: '',
+            showPicture:false,
+            isLoading:false
+        },
+        created: function () {
+            if(window.localStorage.getItem('collects')!=='') {
+                this.collects = window.localStorage.getItem('collects').split(',')
+                for (let item of this.collects) {
+                    this.collectSet.add(item)
+                }
+                console.log(this.collects)
+            }
+        },
+        updated: function () {
+            document.body.style.height = document.body.scrollHeight + 'px'
+        },
+        methods: {
+            uploadClick() {
+                document.querySelector('#upload').click();
+            },
+            upload(e) {
+                console.log(e.target.files[0])
+                this.file = e.target.files[0]
+                this.url = URL.createObjectURL(e.target.files[0])
+                console.log(this.url)
+                this.fileName = this.file.name
+            },
+            clear() {
+                this.fileName = '点击右边按钮上传图片'
+                this.url = ''
+                this.file = ''
+                this.showPicture = false
+                document.body.style.height = '100%'
+            },
+            search() {
+                this.isLoading=true
+                let formData = new FormData()
+                formData.append("file", this.file)
+                axios({
+                    url: 'http://127.0.0.1:5000/imgUpload',
+                    method: 'post',
+                    data: formData
+                }).then(res => {
+                    this.pictureList = []
+                    this.tags = []
+                    this.currentTag = ''
+                    let set = new Set()
+                    for (let i = 0; i < 9; i++) {
+                        let key = "image" + i;
+                        let url = res.data[key][0].substring(0, 7) + '/' + res.data[key][0].substring(7);
+                        let tag = res.data[key][1]
+                        this.pictureList.push({
+                            img: "http://127.0.0.1:5000" + url,
+                            tag: tag
+                        });
+                        if (!set.has(tag)) {
+                            set.add(tag)
+                            this.tags.push(tag)
+                        }
+                    }
+                    this.showPicture=true
+                    this.isLoading=false
+                }).catch((err) => {
+                    console.log(err)
+                })
+            },
+            remove(index) {
+                this.collectSet.delete(this.collects[index])
+                this.collects.splice(index,1)
+                let collects = ''
+                for (let item of this.collects) {
+                    collects += item + ','
+                }
+                collects = collects.substring(0, collects.length - 1)
+                window.localStorage.setItem('collects', collects)
+            },
+            favorite(index) {
+                console.log(this.collectSet.has(this.pictureList[index].img))
+                if (!this.collectSet.has(this.pictureList[index].img)){
+                    this.collects.push(this.pictureList[index].img)
+                    let collects = ''
+                    for (let item of this.collects) {
+                        collects += item + ','
+                    }
+                    collects = collects.substring(0, collects.length - 1)
+                    window.localStorage.setItem('collects', collects)
+                }
+
+            }
+        }
+    })
+</script>
+</html>
